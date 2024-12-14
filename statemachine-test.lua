@@ -37,7 +37,7 @@ local strip_mine = sm.define {
         return "mined", iteration + 1
     end,
     mined = function(iteration)
-        if --[[ needs_dump() --]] true then
+        if --[[ needs_dump() --]] false then
             print("place_container()")
             return "placed_chest", iteration
         elseif iteration == TUNNEL_WIDTH then
@@ -80,7 +80,7 @@ local main_loop = sm.define {
         print("turtle.turnRight()")
         print("SHOULD CYCLE BACK TO facing_right_wall")
         -- return "facing_right_wall"
-        return sm.EXIT "facing_right_wall"
+        return sm.EXIT, "facing_right_wall"
     end,
 
     strip_mine = strip_mine

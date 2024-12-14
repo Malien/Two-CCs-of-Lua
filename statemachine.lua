@@ -25,11 +25,7 @@ StateMachine.mt = {
 ---@return function|table
 local function traverse_once(descriptor, definition)
     local next = definition[descriptor]
-    -- print("traverse_once", pretty(descriptor), pretty(next))
     if type(next) == "nil" then
-        -- print(pretty(definition))
-        -- print(pretty(descriptor))
-        -- print(pretty(next))
         error("State machine transitioned to an undefined state " .. pretty(descriptor))
     elseif type(next) == "function" or type(next) == "table" then
         return next
@@ -83,7 +79,21 @@ local function step(from_state, definition)
     local handler, state = traverse_redirections(from_state, definition)
 
     if type(handler) == "table" then
-        error("TODO: Support child state machines")
+        assert(getmetatable(handler) == StateMachine.mt)
+        if #state < 2 then
+            error("A transition to a child state machine, " .. pretty(state[1]) .. " didn't provide a return state of the parent. Expected `return \"child\", \"return_to\"[, ... child arguments]>` ")
+        end
+        local child_state
+        if #state == 2 then
+            child_state = { START }
+        else
+            child_state = { table.unpack(state, 3) }
+        end
+        local next_child_state = step(child_state, handler.definition)
+        if next_child_state[1] == EXIT then
+            return { state[2], table.unpack(next_child_state, 2) }
+        end
+        return { state[1], state[2], table.unpack(next_child_state) }
     end
 
     local next_state = table.pack(handler(table.unpack(state, 2)))
@@ -95,12 +105,9 @@ end
 
 function StateMachine:run(...)
     local first_arg = ...
-    -- print("first_arg", first_arg)
-    -- print("...", ...)
     local state = first_arg and { ... } or { START }
 
     while state[1] ~= EXIT do
-        -- print(pretty(state))
         state = step(state, self.definition)
     end
 
