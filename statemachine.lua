@@ -114,27 +114,50 @@ function StateMachine:run(...)
     return table.unpack(state, 2)
 end
 
+function StateMachine:run_persisted(state_filepath, ...)
+    local first_arg = ...
+    local state = first_arg and { ... } or { START }
+
+    while state[1] ~= EXIT do
+        state = step(state, self.definition)
+        local statefile = fs.open(state_filepath, "w")
+        statefile.write(textutils.serialise(state))
+        statefile.close()
+    end
+
+    return table.unpack(state, 2)
+end
+
+local function load_state_from_file(file)
+    local statestring = file.readAll()
+    local state = textutils.unserialise(statestring)
+    if state == nil then
+        error("Couldn't deserialize")
+    end
+    return state
+end
+
+function StateMachine:resume_persisted(state_filepath)
+    if fs.exists(state_filepath) then
+        local statefile = fs.open(state_filepath, "r")
+        local ok, state_or_error = pcall(load_state_from_file, statefile)
+        statefile.close()
+        if ok then
+            print("Recovered previously persisted state:", pretty(state_or_error))
+            self:run_persisted(state_filepath, table.unpack(state_or_error))
+        else
+            print("Couldn't parse state file", state_or_error)
+            self:run_persisted(state_filepath)
+        end
+    else
+        print("Previously persisted state doesn't exists, starting with sm.START")
+        return self:run_persisted(state_filepath)
+    end
+end
 
 local function define_state_machine(definition)
     expect(1, definition, "table")
     return setmetatable({ definition = definition }, StateMachine.mt)
-end
-
-local function load_state_from_string(str)
-    expect(1, str, "string")
-end
-
-local function load_state_from_file(path)
-    expect(1, path, "string")
-end
-
-local function serialize_state(state)
-    expect(1, state, "table")
-end
-
-local function persist_state_to_file(state, path)
-    expect(1, state, "table")
-    expect(2, path, "string")
 end
 
 return {
@@ -142,58 +165,3 @@ return {
     START = START,
     EXIT = EXIT
 }
-
--- local strip_mine = define_state_machine {
---     [sm.START] = { "moved_forward", 0 },
-
---     moved_forward = function(iteration)
---         mine()
---         return "mined", iteration + 1
---     end,
---     mined = function(iteration)
---         if needs_dump() then
---             place_container()
---             return "placed_chest", iteration
---         elseif iteration == TUNNEL_WIDTH then
---             return sm.EXIT
---         else
---             force_forward()
---             return "moved_forward", iteration
---         end
---     end,
---     placed_chest = function(iteration)
---         dump()
---         return "mined", iteration
---     end
--- }
-
--- local main_loop = define_state_machine {
---     [sm.START] = { "facing_right_wall" },
-
---     facing_right_wall = function()
---         force_forward()
---         return "within_right_wall"
---     end,
---     within_right_wall = function()
---         turtle.turnRight()
---         return "strip_mine", "finished_mining_right"
---     end,
---     finished_mining_right = function()
---         turtle.turnLeft()
---         return "facing_left_wall"
---     end,
---     facing_left_wall = function()
---         force_forward()
---         return "within_left_wall"
---     end,
---     within_left_wall = function()
---         turtle.turnLeft()
---         return "strip_mine", "finished_mining_left"
---     end,
---     finished_mining_left = function()
---         turtle.turnRight()
---         return "facing_right_wall"
---     end,
-
---     strip_mine = strip_mine
--- }
